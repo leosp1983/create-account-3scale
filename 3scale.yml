@@ -1,4 +1,4 @@
-- hosts: jaen04.orizon.local
+- hosts: <hostname>
   gather_facts: no
   vars:
     ansible_user: "{{user}}"
@@ -7,13 +7,4 @@
   tasks:
 
     - include_role:
-        name: desenvolvimento  
-      when: ambiente == 'desenvolvimento'
-    
-    - include_role:
-        name: homologacao  
-      when: ambiente == 'homologacao'
-    
-    - include_role:
-        name: producao  
-      when: ambiente == 'producao'
+        name: account  
