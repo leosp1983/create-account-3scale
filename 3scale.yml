@@ -1,0 +1,19 @@
+- hosts: jaen04.orizon.local
+  gather_facts: no
+  vars:
+    ansible_user: "{{user}}"
+    ansible_ssh_pass: "{{pass}}"
+
+  tasks:
+
+    - include_role:
+        name: desenvolvimento  
+      when: ambiente == 'desenvolvimento'
+    
+    - include_role:
+        name: homologacao  
+      when: ambiente == 'homologacao'
+    
+    - include_role:
+        name: producao  
+      when: ambiente == 'producao'

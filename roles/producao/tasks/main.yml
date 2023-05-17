@@ -1,0 +1,67 @@
+- name: Validando se o tenant {{tnt}} já existe!
+  ansible.builtin.shell: curl -X GET \
+    https://master.api.ocppr.orizon.com.br/admin/api/accounts.xml \
+    -d "access_token=2e0c26070088f6923f2e4321f0eec3419b96501cf6bb3f0707670149c84d57c1" -k \
+    -d "state=approved" \
+    -d "page=1" \
+    -d "per_page=500" | xmllint --format - | grep "{{tnt}}" || /bin/true
+  register: accountslist
+  ignore_errors: true
+
+- name: Criando o tenant {{tnt}}
+  ansible.builtin.shell: curl -X POST  \
+    https://master.api.ocppr.orizon.com.br/master/api/providers.xml \
+    -d "access_token=2e0c26070088f6923f2e4321f0eec3419b96501cf6bb3f0707670149c84d57c1" -k \
+    -d "org_name={{tnt}}" \
+    -d "username=svc_devops" \
+    --data-urlencode "email=infraestrutura@orizon.com.br" \
+    -d "password=3scaleadmin"
+  register: tenantid
+  when: accountslist.stdout == ""
+
+- name: Coletando o token para salvar em https://git.orizon.com.br/aap/criacao-tenant-3scale/-/tree/main/tokens
+  ansible.builtin.debug:
+    msg: "{{ tenantid.stdout | regex_findall('(?:[A-Za-z0-9]{1,})(?=<\\/value>)') }}"
+  register: accesstokens
+  when: accountslist.stdout == ""
+    
+- name: Colentando a id do user para ativação
+  ansible.builtin.debug:
+    msg: "{{ tenantid.stdout | regex_findall('\\b(?:[0-9]{1,5}\\b)(?=<\\/id>)') }}"
+  register: id
+  when: accountslist.stdout == ""
+  
+- name: Ativando o tenant {{tnt}} e o usuário svc_devops para administração
+  ansible.builtin.shell: curl -X PUT \
+    https://master.api.ocppr.orizon.com.br/admin/api/accounts/{{id.msg[0]}}/users/{{id.msg[4]}}/activate.xml \
+    -d "access_token=2e0c26070088f6923f2e4321f0eec3419b96501cf6bb3f0707670149c84d57c1" -k
+  when: accountslist.stdout == ""
+
+- ansible.builtin.pause:
+    seconds: 30
+
+- name: Criando integração com o realm 3scale-infra no https://sso-rhsso-prd.apps.ocppr.orizon.local
+  ansible.builtin.shell: curl -X POST \
+    https://{{tnt}}-admin.api.ocppr.orizon.com.br/admin/api/account/authentication_providers.xml \
+    -d "access_token={{accesstokens.msg[0]}}" -k \
+    -d "kind=keycloak" \
+    -d "client_id=3scale-admin" \
+    -d "client_secret=ROiEiN9uJPQ9A3TeelCU1rWGuJ8tdtXA" \
+    -d "site=https://sso-rhsso-prd.apps.ocppr.orizon.local/auth/realms/3scale-infra" \
+    -d "skip_ssl_certificate_verification=True" \
+    -d "published=True"
+  when: accountslist.stdout == ""
+
+- name: Salvando o token 
+  ansible.builtin.lineinfile:
+    path: /root/git/criacao-tenant-3scale/tokens/tokens-prod.yml
+    state: present
+    line: "\nAccount: {{tnt}}\ntoken: {{accesstokens.msg[0]}}"
+    backup: no
+  when: accountslist.stdout == ""
+
+- name: Fazendo o commit e push do token salvo 
+  ansible.builtin.shell: git pull && git add . && git commit -m "criacao-tenant-3scale" && git push
+  args:
+    chdir: /root/git/criacao-tenant-3scale/
+  when: accountslist.stdout == ""
